@@ -39,9 +39,19 @@ class KR10R1100(DHRobot):
         self.addconfiguration("master", self.q_master)
         self._add_geometry()
 
+    def frames(self, q):
+        """World pose of every DH frame 0..6 (0 = base), computed here so it does
+        not depend on the toolbox version's internal link/geometry indexing."""
+        T = self.base if self.base is not None else SE3()
+        out = [T]
+        for link, qi in zip(self.links, q):
+            T = T * link.A(qi)
+            out.append(T)
+        return out
+
     @staticmethod
-    def _segment(T_link_inv, p0, p1, radius, color):
-        """Cylinder between world points p0->p1, expressed in link frame."""
+    def _segment(p0, p1, radius, color):
+        """Cylinder between world points p0->p1. Returns (shape, pose in world)."""
         v = p1 - p0
         L = np.linalg.norm(v)
         if L < 1e-6:
@@ -50,28 +60,35 @@ class KR10R1100(DHRobot):
         ref = np.array([1, 0, 0]) if abs(z[0]) < 0.9 else np.array([0, 1, 0])
         x = np.cross(ref, z); x /= np.linalg.norm(x)
         y = np.cross(z, x)
-        R = np.column_stack([x, y, z])
-        mid = (p0 + p1) / 2
-        T_world = SE3.Rt(R, mid)
-        return sg.Cylinder(radius=radius, length=L, pose=T_link_inv * T_world, color=color)
+        return sg.Cylinder(radius=radius, length=L, color=color), SE3.Rt(np.column_stack([x, y, z]), (p0 + p1) / 2)
 
     def _add_geometry(self):
-        """Attach orange cylinders (arm) + grey joint spheres so Swift shows a 3D body."""
+        """Build orange arm cylinders + grey joint spheres. Each visual is stored with
+        its offset in the DH frame it belongs to, and moved by update_visuals(q)."""
         orange, grey = (1.0, 0.45, 0.0, 1.0), (0.25, 0.25, 0.25, 1.0)
-        Ts = self.fkine_all(self.q_master)           # frames 0..6 at mastering pose
-        pts = [Ts[i].t for i in range(7)]
+        Ts = self.frames(self.q_master)
+        pts = [T.t for T in Ts]
         radii = [0.085, 0.070, 0.058, 0.050, 0.044, 0.034]
-        # extra joint-axis points so the offsets (A1, A3) look right
-        for i, link in enumerate(self.links, start=1):
+        self.visuals = []                            # (shape, frame index, local pose)
+        for i in range(1, 7):
             Tinv = Ts[i].inv()
-            seg = self._segment(Tinv, pts[i - 1], pts[i], radii[i - 1], orange)
+            seg = self._segment(pts[i - 1], pts[i], radii[i - 1], orange)
             if seg is not None:
-                link.geometry.append(seg)
-            link.geometry.append(
-                sg.Sphere(radius=radii[i - 1] * 1.15, pose=Tinv * SE3(*pts[i]), color=grey))
-        # base plate
-        self.links[0].geometry.append(
-            sg.Cylinder(radius=0.13, length=0.05, pose=Ts[1].inv() * SE3(0, 0, 0.025), color=grey))
+                self.visuals.append((seg[0], i, Tinv * seg[1]))
+            self.visuals.append((sg.Sphere(radius=radii[i - 1] * 1.15, color=grey), i,
+                                 Tinv * SE3(*pts[i])))
+        # base plate (fixed to the base frame)
+        self.visuals.append((sg.Cylinder(radius=0.13, length=0.05, color=grey), 0, SE3(0, 0, 0.025)))
+
+    def update_visuals(self, q):
+        Ts = self.frames(q)
+        for shape, i, local in self.visuals:
+            shape.T = (Ts[i] * local).A
+
+    def add_to(self, env):
+        for shape, _, _ in self.visuals:
+            env.add(shape)
+        self.update_visuals(self.q_master)
 
 
 def checks(robot):
@@ -81,7 +98,7 @@ def checks(robot):
     print("Mastering pose TCP [m]:", Tm.t)
     # wrist-centre (frame 4) reach with arm outstretched, compare with 901.5 mm datasheet
     q = d2r([0, 0, 0, 0, 0, 0])
-    wc = robot.fkine_all(q)[4].t
+    wc = robot.frames(q)[4].t
     print(f"Outstretched wrist-centre reach (A1 axis -> A5): {np.hypot(wc[0], wc[1]) * 1000:.1f} mm "
           f"(datasheet max reach 1101 mm)")
 
@@ -113,14 +130,13 @@ def demo(robot, headless=False):
     from swift import Swift
     env = Swift()
     env.launch(realtime=True)
-    robot.q = robot.q_master
-    env.add(robot)
+    robot.add_to(env)
     box = sg.Cuboid([0.04, 0.04, 0.04], pose=SE3(0.60, 0.25, 0.02), color=(0.1, 0.4, 0.9, 1))
     env.add(box)
     env.add(sg.Cuboid([0.45, 1.0, 0.002], pose=SE3(0.60, 0, -0.001), color=(0.7, 0.7, 0.7, 1)))
 
     for k, q in enumerate(traj):
-        robot.q = q
+        robot.update_visuals(q)
         stage = k // 40                      # 0-1 approach, 2-4 carry, 5-6 retreat
         if 2 <= stage <= 4:                  # box is grasped: follows the tool
             box.T = (robot.fkine(q) * SE3(0, 0, 0.02)).A
