@@ -1,4 +1,6 @@
 # Assessment-2-Robotics-Huy-Truong-And-Zixun-Guo
-Our project develops a simulated pick-and-place workcell using a KUKA KR 6 R900 sixx industrial arm modelled in the Robotics Toolbox for Python. 
-The system will compute forward and inverse kinematics, plan collision-free trajectories between a table and target locations, and visualise the motion in a 3D environment alongside safety-relevant workspace boundaries. 
-We aim to demonstrate practical industrial automation concepts covered in IR1 — DH parameterisation, joint-space/task-space control, and risk-aware path planning — while giving the team hands-on experience modelling a manipulator not already provided in the course toolbox.
+Robot Café Drink Line
+
+A Robotics Toolbox for Python and Swift simulation of three different 6-axis arms running an automated café. A Doosan M0609 takes a cup from the rack and fills it at the coffee machine, a UR3e presses on the lid, and a Yaskawa GP7 places the finished drink in a free pickup slot. The arms work as a pipeline.
+
+A simulated laser scanner tracks a customer walking up to the counter. Each arm runs normally, slows to 35% speed, or stops, depending on how close the customer is, and resumes after they have stayed clear for 1.5 s. Amber and red floor zones show where slowing and stopping happen.
