@@ -1,0 +1,16 @@
+Yaskawa GP7 - standard DH (Robotics Toolbox RevoluteDH), derived from the ROS-Industrial URDF
+(motoman_gp7_support, joint origins/axes at zero pose) and verified against URDF FK on 2000 random
+configurations: flange position error < 1e-15 m, joint-axis error < 1e-15, positive joint directions = URDF.
+
+ i   offset   d [m]    a [m]    alpha      joint limit (deg)
+ 1   0        0.330    0.040    -pi/2      -170 .. 170
+ 2   -pi/2    0        0.445     pi        -65  .. 145
+ 3   0        0        0.040    -pi/2      -70  .. 190
+ 4   0       -0.440    0         pi/2     -190  .. 190
+ 5   pi       0        0         pi/2     -135  .. 135
+ 6   0       -0.080    0         pi       -360  .. 360
+
+Zero pose: arm stands up, forearm points +x, flange at (0.56, 0, 0.815) m. Frame 6 z-axis points out of the flange.
+Meshes: YaskawaGP7Link0..6.dae are expressed in the DH frame of the same index (Link0 = base), metres,
+Z_UP, lambert, so they drop into UTSMeshRobot / DHRobot3D exactly like DoosanM0609Link*.dae.
+Link names in the source: base_link, link_1_s ... link_6_t.
